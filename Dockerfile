@@ -1,7 +1,7 @@
-# Stage 1: Dependency Installation & Build (Multi-stage)
+# Stage 1: Dependency Installation & Build
 FROM node:22-alpine AS builder
 
-# Install libc6-compat for Next.js on Alpine Linux
+# Install compatibility package for Next.js on Alpine
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
@@ -13,34 +13,36 @@ RUN npm ci --prefer-offline --no-audit
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED 1
 RUN npm run build
+# We'll keep the full node_modules and .next directory for the runner stage
 
-# Stage 2: Production Image (The efficient runner)
-# Use a minimal base image that only includes the necessary runtime.
+# ----------------------------------------------------
+
+# Stage 2: Production Image (The traditional runner)
 FROM node:22-alpine AS runner
 
-# Install libc6-compat for Next.js on Alpine Linux
+# Install compatibility package for Next.js on Alpine
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
 # Set environment variables
 ENV NODE_ENV production
-# Cloud Run automatically sets the PORT env var (usually 8080), 
-# but Next.js expects the start script to handle it.
-ENV PORT 8080 
+ENV PORT 8080
 EXPOSE 8080
 
-# --- CRITICAL CHANGE: Copy Standalone Output ---
-# The standalone output creates a self-contained server in .next/standalone/
-# It traces *only* the necessary node_modules, removing the need for 'npm prune'.
-COPY --from=builder /app/.next/standalone ./
-COPY --from=builder /app/.next/static ./.next/static
-COPY --from=builder /app/public ./public
+# --- CRITICAL CHANGE: Copying Standard Next.js Output ---
+# 1. Copy necessary files for the Next.js server to run.
+COPY --from=builder /app/.next ./.next
+COPY --from=builder /app/node_modules ./node_modules 
+COPY --from=builder /app/package.json ./package.json 
+COPY --from=builder /app/public ./public 
+COPY --from=builder /app/next.config.mjs ./next.config.mjs # Include config if necessary
 
-# Set a non-root user for security (required by some organizations)
-# The user 'nextjs' is created in the previous Cloud Run example.
+# Set a non-root user for security
+# The user 'nextjs' is created here.
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 nextjs
 USER nextjs
 
-# The command to run the built standalone server
-CMD ["node", "server.js"]
+# The command to run the built Next.js server
+# It will use the PORT environment variable (8080)
+CMD ["npm", "start"]
