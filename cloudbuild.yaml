@@ -1,26 +1,44 @@
 steps:
-  - name: 'gcr.io/cloud-builders/docker'
-    args: [
-      'build',
-      '-t', 'gcr.io/$PROJECT_ID/ff-website-ts:$SHORT_SHA',
-      '.'
-    ]
-  - name: 'gcr.io/cloud-builders/docker'
-    args: [
-      'push',
-      'gcr.io/$PROJECT_ID/ff-website-ts:$SHORT_SHA'
-    ]
-  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-    entrypoint: 'gcloud'
-    args: [
-      'run', 'deploy', 'ff-website-ts',
-      '--image', 'gcr.io/$PROJECT_ID/ff-website-ts:$SHORT_SHA',
-      '--region', 'us-central1',
-      '--platform', 'managed',
-      '--allow-unauthenticated',
-      '--port', '8080'
-    ]
-    
+# 1. Build the Docker Image
+# We explicitly set the DOCKERFILE argument to ensure it finds your Dockerfile in the root.
+- name: 'gcr.io/cloud-builders/docker'
+  id: Build
+  args: [
+    'build',
+    '-t',
+    'us-central1-docker.pkg.dev/$PROJECT_ID/ff-website-ts/ff-website-ts:$SHORT_SHA',
+    '-f',
+    'Dockerfile', # <-- Explicitly point to the Dockerfile in the root
+    '.'           # <-- Set the build context to the current directory (root)
+  ]
 
+# 2. Push the Image to Artifact Registry
+- name: 'gcr.io/cloud-builders/docker'
+  id: Push
+  args: [
+    'push',
+    'us-central1-docker.pkg.dev/$PROJECT_ID/ff-website-ts/ff-website-ts:$SHORT_SHA'
+  ]
+
+# 3. Deploy the Service to Cloud Run
+- name: 'gcr.io/google/cloud-sdk'
+  id: Deploy
+  entrypoint: 'gcloud'
+  args: [
+    'run',
+    'deploy',
+    'ff-website-ts', # <-- Service Name (matches your screenshot)
+    '--image',
+    'us-central1-docker.pkg.dev/$PROJECT_ID/ff-website-ts/ff-website-ts:$SHORT_SHA',
+    '--region',
+    'us-central1', # <-- Region (matches your screenshot)
+    '--platform',
+    'managed',
+    '--allow-unauthenticated',
+    '--port',
+    '8080' # <-- Cloud Run port should match EXPOSE/CMD in Dockerfile
+  ]
+
+# Defines the final image name for easy reference
 images:
-  - 'gcr.io/$PROJECT_ID/ff-website-ts:$SHORT_SHA'
+- 'us-central1-docker.pkg.dev/$PROJECT_ID/ff-website-ts/ff-website-ts:$SHORT_SHA'
